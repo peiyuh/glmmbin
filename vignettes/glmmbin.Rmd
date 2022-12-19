@@ -1,0 +1,317 @@
+---
+title: "glmmbin"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{glmmbin}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+## Introduction
+We created a package called “glmmbin”. This package is to use GLMM model (including estimation and bootstrap to analyze the data. In the package, we use ctsib.csv as an example and with our package, the goal of the analysis is to determine how the surface and vision treatments affect a person’s stability. We also set the hypothesis test to help us to test the significance of each predictor. You could see all the examples and plots through the vignette to better understand how the package would work with GLMM.
+
+There are 4 functions in the package(in 4 R scripts).
+1. estimation.R 
+ function: run_model requires two arguments:
+- `data` -- the data set for your example 
+- `example` -- the name of your example: one of "culcita", "ctsib", "epilepsy", or "tortoise"
+
+The function return a list with summary statistics from the fitted model. 
+
+2. bootstrap.R
+
+ function: bootstrap requires three arguments:
+- `B` -- bootstrap replicates 
+- `data` -- data used for bootstrap
+- `para` -- the parameters for null hypothesis
+
+The function return a list with summary statistics from the bootstrap.
+
+3. bootstrap_vision.R
+
+ function: bootstrap_vision requires three arguments:
+- `B` -- bootstrap replicates 
+- `data` -- data used for bootstrap
+- `para` -- data used for bootstrap
+
+The function return a list with summary statistics from the bootstrap.
+
+4. hypothesis.R
+
+ function: hypothesis requires two arguments:
+- `ctsib_fit` -- a list with summary statistics from the fitted model 
+- `bootstrap` -- results for running bootstrap function
+
+The function return a list with p values for variables that we want to test.
+
+To use the package we need to load it into our `R` session. The example in this vignette also use functions from the `tidyverse`, `dplyr`, `lme4`, `broom`,`broom,mixed` package, though this is not necessary for general use of our package.
+```{r setup}
+
+library(tidyverse)
+library(dplyr)
+library(lme4)
+library(broom)
+library(broom.mixed)
+
+```
+## Import data and data analysis
+
+At first, we first import our data into R and we can clearly see in this dataset, we have Surface(norm, foam) and Vision(dome, open, closed), which is the predictor that we will use in the following analysis.
+In ctsib.csv, we have 40 candidates and each candidates need to be tested for 12 times in different surface type and vision type, and after the analysis with GLMM model, we will get th result of how surface and vision will affect stability.
+```{r}
+## Importing the data ##
+ctsib <- read_csv("~/Documents/Western University/Fall 2022/Project_part2/ctsib.csv")
+original_data <- ctsib
+# since the goal of this analysis is to determine how the surface and vision treatments affect a person’s stability,
+# only the relevant data would be used.
+original_relevant_data <- select(original_data, Surface, Vision, CTSIB)
+head(original_data)
+```
+
+
+
+## Data pre-processing
+Initially, we do some data pre-process, and we can clearly to see that we have 240 cases with surface with foam and another 240 samples with surface norm.
+```{r}
+table(original_relevant_data$Surface)
+```
+
+
+Then to label foam with 1 and norm with 2.
+```{r}
+# foam -> 1, norm -> 2
+original_relevant_data$Surface[original_relevant_data$Surface == "foam"] <- 1
+original_relevant_data$Surface[original_relevant_data$Surface == "norm"] <- 2
+table(original_relevant_data$Surface)
+```
+
+
+We also can use table() to extract three types of vision(dome, open, closed), and each type has 160 samples.
+```{r}
+table(original_relevant_data$Vision)
+```
+
+Then to label closed with 1 dome with 2 and open with 3.
+```{r}
+original_relevant_data$Vision[original_relevant_data$Vision == "closed"] = 1
+original_relevant_data$Vision[original_relevant_data$Vision == "dome"] = 2
+original_relevant_data$Vision[original_relevant_data$Vision == "open"] = 3
+table(original_relevant_data$Vision)
+```
+
+We replace the column value of the CTSIB to 1 when its value is greater than 1.
+We replace the column value of the CTSIB to 0 when its value is greater than 1.
+```{r}
+
+# fill the na value with 0
+original_relevant_data[is.na(original_relevant_data)] <- 0;
+
+# replace the column value of the CTSIB to 2 when its value is greater than 1
+original_relevant_data$CTSIB[original_relevant_data$CTSIB <= 1] <- 0
+original_relevant_data$CTSIB[original_relevant_data$CTSIB > 1] <- 1
+original_relevant_data$CTSIB
+```
+
+From this plot, we can clearly see in the original dataset, we have more samples with ctsib(larger than 1).
+
+```{r}
+plot(original_relevant_data$CTSIB)
+```
+## gg plot
+We create a new column of stable (binary version(0 or 1)) to indicate the subjects’ stability, and we define in this model, our response variable is stable. We create a histogram to indicate how many subjects are tested stable in each 12 times. From this histogram, we can clearly to see that more subjects get the test result as not stable.
+```{r}
+
+## Define response (stable or not)
+ctsib <- ctsib %>%
+  mutate(stable = 1 * (CTSIB == 1))
+
+## Data analysis ##
+ggplot(data= ctsib,mapping = aes(x = stable))+
+  geom_histogram(bindwidth=0.4)
+```
+## Fit the model
+We fit model to ctsib data. Fixed effects in the model include:
+ (Intercept) -- the intercept
+  Surface -- a categorical variable with two levels (foam and norm)
+  Vision -- a categorical variable with three levels (closed, dome, open)
+Then we can get the estimated beta parameters, test statistics for each of the beta parameters, estimated variance parameter and estimated random effects.
+```{r}
+## Fit model to ctsib data. Fixed effects in the model include:
+##  (Intercept) -- the intercept
+##  Surface -- a categorical variable with two levels (foam and norm)
+##  Vision -- a categorical variable with three levels (closed, dome, open)
+
+
+## Fit the model using glmer ##
+
+
+ctsib_fit <- run_model(ctsib, "ctsib")
+
+
+## Components
+
+# 1) Estimated beta parameters
+ctsib_fit$beta
+
+# 2) Test statistics for each of the beta parameters
+ctsib_fit$test_stat
+
+# 3) Estimated variance parameter
+ctsib_fit$sigmasq
+
+# 4) Estimated random effects
+ctsib_fit$re
+
+
+```
+
+## Data processing before bootstrap
+Before using bootstrap, we need to set categorical data to dummy data surface_noam: If the surface of data is norm, then it will be 1, otherwise 0.
+ vision_open: If the vision of data is open, then it will be 1, otherwise 0.
+ vision_dome: If the vision of data is dome, then it will be 1, otherwise 0.
+ Combing vision_open and vision_dome, if there is 0 for both variables respectively, that means
+ the vision of data is closed.
+```{r}
+
+## Load data
+data_test <- ctsib %>%
+  mutate(surface_norm = ifelse(Surface == 'norm',1, 0),
+         vision_open = ifelse(Vision == 'open',1,0),
+         vision_dome = ifelse(Vision == 'dome', 1, 0))
+  
+```
+
+## Bootstrap and hypothesis test
+
+We will use the bootstrap, bootstrap_vision and hypothesis functions to explore how the surface and vision treatments affect a person’s stability.
+
+For the binomial model
+$ i $ is the number of subjects and $j$ is the number of measurements per subject.
+$ \mu_{i} $ is a binomial variable that we will classify the response as stable (CTSIB = 1) or not (CTSIB > 1).
+The linear prediction is 
+$$    
+\eta_{i}=\beta_{0}+x_{i}\beta+Z_i
+$$
+where $\beta$ includes: surface_norm, vision_dome and vision_open. 
+And 
+$$
+Z_i \sim N(0,\sigma^{2})
+$$
+
+$$ 
+\mu_{i}=\frac{exp(\eta_{i})}{1+exp(\eta_{i})}
+$$
+Then
+$$
+Y_{ij}\mid \mu_{i} \sim Bernoulli(\frac{exp(\beta_{0}+x_{i}\beta+Z_{i})}{1+exp(\beta_{0}+x_{i}\beta+Z_{i})})
+$$
+
+## Bootstrap
+
+For bootstrap, we need to:
+(1) Set B which means the bootstrap replicates and N is the number of sets includes iid. residuals(different).
+(2) Resample residuals from normal distribution with the fitting model's sigmasq.
+(3) Compute linear predictor.
+(4) Compute mu_hat_i for linear predictor. 
+(5) Resample B sets of Y_hat which is Bernoulli distribution and combine it with original data.
+(6) Remove problematic replicates.
+(7) Bootstrap from new data after resampling
+
+## Hypothesis
+
+If we want to explore how the surface treatments affect a person’s stability, we can do these:
+
+(1) We set surface_norm to 0 for data_test. 
+(2) Bootstrap for new data_test 
+(3) Use the hypothesis funuction to get the t values:
+ t_value_norm is the t value of ctsib_fit for term "Surfacenorm", then we compare it with
+ the t value of bootstrap for term "Surfacenorm" and compute the p value.
+```{r}
+## Using bootstrap ##
+
+set.seed(8888)
+
+para <- rep(1,3)
+
+bootstrap_fit<- bootstrap(20,data_test,para)
+
+## Test surface ##
+para[1] <- 0
+
+
+bootstrap_surface_norm <- bootstrap(20,data_test,para)
+
+p_value <- hypothesis(ctsib_fit,bootstrap_surface_norm)
+p_surface_norm <- p_value[1]
+p_surface_norm
+
+## Test vision ##
+
+set.seed(9999)
+para_vision <- rep(1,3)
+para_vision[2] <- 0
+para_vision[3] <- 0
+
+bootstrap_vision <- bootstrap_vision(20,data_test,para_vision)
+
+p_value <- hypothesis(ctsib_fit,bootstrap_vision)
+p_vision_dome <- p_value[2]
+p_vision_dome
+
+p_vision_open <- p_value[3]
+p_vision_open
+
+```
+## Sampling distribution of slope by surface_norm
+From the plot observation, we can see most of the graph is located on the left side of the red line. The Red line indicates the test statistic that we get from the original model fitting, and the slope is the consecutive results after running the bootstrap function.
+```{r}
+## Sampling distribution for surface ##
+t_value_surface_norm <- ctsib_fit$test_stat[2] # Extract test statistic
+bootstrap_fit %>%
+  filter(term == "Surfacenorm") %>%
+  ggplot(aes(x = statistic)) +
+  geom_density() + 
+  geom_vline(xintercept = t_value_surface_norm, col = "red")+
+  ylab("Bootstrap Sampling Distribution") +
+  xlab("Slope")
+```
+
+## Sampling distribution of slope by vision_dome
+From the plot observation, we can see most of the red line is located in the middle of the plot. The Red line indicates the test statistic that we get from the original model fitting, and the slope is the consecutive results after running the bootstrap function.
+```{r}
+## Sampling distribution for vision_dome ##
+t_value_vision_dome <- ctsib_fit$test_stat[3] # Extract test statistic
+bootstrap_fit %>%
+  filter(term == "Visiondome") %>%
+  ggplot(aes(x = statistic)) +
+  geom_density() + 
+  geom_vline(xintercept = t_value_vision_dome, col = "red")+
+  ylab("Bootstrap Sampling Distribution") +
+  xlab("Slope")
+```
+## Sampling distribution of slope by vision_open
+From the plot observation, we can see most of the graph is located on the left side of the red line. The Red line indicates the test statistic that we get from the original model fitting, and the slope is the consecutive results after running the bootstrap function.
+
+```{r}
+## Sampling distribution for vision_open ##
+t_value_vision_open <- ctsib_fit$test_stat[4] # Extract test statistic
+bootstrap_fit %>%
+  filter(term == "Visionopen") %>%
+  ggplot(aes(x = statistic)) +
+  geom_density() + 
+  geom_vline(xintercept = t_value_vision_open, col = "red")+
+  ylab("Bootstrap Sampling Distribution") +
+  xlab("Slope")
+```
+## Hypothesis conclusion
+Based on the hypothesis test that we made, we may reject the null hypothesis, we can say beta[1] which is the surface norm is significant, and beta[2], and beta[3] are also significant. Then, we may conclude that the normal surface has significant effects on a person’s stability, while similarly, vision treatments including dome vision and open vision also have significant effects on a person's stability.
+
+## Conclusion
+Concluding all 3 steps of our package, at first we load all data of ctsib.csv into the function and plot the histogram of our observations of stability for 40 subjects which test 12 times. In addition, in the first step, we also confirmed the response of our model and define it in our data. Then, we apply the estimation function to get the Estimated beta parameters, Test statistics for each of the beta parameters, Estimated variance parameter and Estimated random effects. Through the estimation process, we also defined our predictors(surfacenorm, visiondome, visionopen) and because these 3 predictors are all categorical variables in our dataset, we substitute them in to a binary version(0 or 1) which is more observable. Next, we create a function including the bootstrap for binomial, and it returns a list with summary statistics from the bootstrap. After bootstrap, we create a function that do hypothesis test, we first confirmed our null hypothesis, and then, we reduced each beta and refit the model then we calculate p-value for each predictor respectively.
