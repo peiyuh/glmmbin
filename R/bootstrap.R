@@ -37,17 +37,13 @@ bootstrap <- function(B, data, para){
     slice(rep(1:480,B)) %>%
     mutate(B = rep(1:B,each = 480)) %>%
     mutate(mu_hat_i = mu_hat_i) %>%
-    mutate(Y_hat = rbernoulli(n(), mu_hat_i))
+    mutate(stable = rbernoulli(n(), mu_hat_i))
 
-  ## Remove problematic replicates
-  data_test_new <- data_test_new %>%
-    filter(!(B %in% c(5,8,9,10,12,13,16,20)))
-
-## Bootstrap from new data after resampling
-    bootstrap_test <- data_test_new %>%
-                        group_by(B)%>%
-                        summarize(tidy(glmer(Y_hat ~ Surface + Vision + (1|Subject),
-                                             family = binomial)), .groups = "drop")
+  ## Bootstrap from new data after resampling
+  bootstrap_test <- data_test_new %>%
+      nest_by(B)%>%
+      summarize(run_model(data, "ctsib", return_tibble = TRUE), 
+                .groups = "drop")
 
    return(bootstrap_test)
 }
