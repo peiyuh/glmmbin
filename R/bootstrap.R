@@ -10,7 +10,7 @@
 #' @examples
 #' ## CTSIB ##
 #' bootstrap_fit <- bootstrap(100,data)
-bootstrap <- function(B, data, para){
+bootstrap_fun <- function(B, data, para){
 
 ## For the binomial model, i is the number of  subjects and j is the number of measurements per subject
 ## B means the bootstrap replicates and N is the number of sets includes iid. residuals(different)

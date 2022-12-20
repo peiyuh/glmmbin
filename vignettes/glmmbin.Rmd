@@ -240,13 +240,13 @@ set.seed(8888)
 
 para <- rep(1,3)
 
-bootstrap_fit<- bootstrap(20,data_test,para)
+bootstrap_fit<- bootstrap_fun(20,data_test,para)
 
 ## Test surface ##
 para[1] <- 0
 
 
-bootstrap_surface_norm <- bootstrap(20,data_test,para)
+bootstrap_surface_norm <- bootstrap_fun(20,data_test,para)
 
 p_value <- hypothesis(ctsib_fit,bootstrap_surface_norm)
 p_surface_norm <- p_value[1]
